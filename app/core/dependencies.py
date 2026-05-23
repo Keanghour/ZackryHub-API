@@ -49,3 +49,30 @@ async def get_current_user(
         )
 
     return user
+
+
+# ── Role checker ───────────────────────────────────────────────────────────────
+from sqlalchemy.orm import selectinload
+
+def require_roles(*allowed_roles: str):
+    """Dependency that checks if current user has one of the allowed roles."""
+    async def checker(
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> User:
+        # Reload user with roles eagerly
+        result = await db.execute(
+            select(User)
+            .options(selectinload(User.roles))
+            .where(User.id == current_user.id)
+        )
+        user = result.scalar_one()
+        user_roles = {role.name for role in user.roles}
+
+        if not user_roles.intersection(set(allowed_roles)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied. Required roles: {', '.join(allowed_roles)}",
+            )
+        return user
+    return checker
