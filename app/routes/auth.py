@@ -1,11 +1,13 @@
 # 📁 app/routes/auth.py
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.db.models.user import User
 from app.core.dependencies import get_current_user
+from app.core.limiter import limiter
+from app.core.config import settings
 from app.schemas.auth import (
     RegisterRequest, RegisterResponse, RegisterData,
     LoginRequest, LoginResponse, LoginData,
@@ -28,7 +30,8 @@ router = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
 
 # ── POST /api/v1/auth/register ─────────────────────────────────────────────────
 @router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
-async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit(settings.RATE_LIMIT_AUTH)
+async def register(request: Request, payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
     user = await register_user(db, payload)
     return RegisterResponse(
         success=True,
@@ -39,7 +42,8 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
 
 # ── POST /api/v1/auth/login ────────────────────────────────────────────────────
 @router.post("/login", response_model=LoginResponse, status_code=status.HTTP_200_OK)
-async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit(settings.RATE_LIMIT_AUTH)
+async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     tokens = await login_user(db, payload)
     return LoginResponse(
         success=True,
@@ -50,7 +54,8 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 # ── POST /api/v1/auth/refresh ──────────────────────────────────────────────────
 @router.post("/refresh", response_model=RefreshTokenResponse, status_code=status.HTTP_200_OK)
-async def refresh(payload: RefreshTokenRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit(settings.RATE_LIMIT_AUTH)
+async def refresh(request: Request, payload: RefreshTokenRequest, db: AsyncSession = Depends(get_db)):
     result = await refresh_access_token(db, payload.refresh_token)
     return RefreshTokenResponse(
         success=True,
@@ -60,14 +65,16 @@ async def refresh(payload: RefreshTokenRequest, db: AsyncSession = Depends(get_d
 
 # ── POST /api/v1/auth/forgot-password ─────────────────────────────────────────
 @router.post("/forgot-password", response_model=ForgotPasswordResponse, status_code=status.HTTP_200_OK)
-async def forgot_password_route(payload: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit(settings.RATE_LIMIT_AUTH)
+async def forgot_password_route(request: Request, payload: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
     await forgot_password(db, payload.email)
     return ForgotPasswordResponse(success=True, message="Reset link sent to email")
 
 
 # ── POST /api/v1/auth/reset-password ──────────────────────────────────────────
 @router.post("/reset-password", response_model=ResetPasswordResponse, status_code=status.HTTP_200_OK)
-async def reset_password_route(payload: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit(settings.RATE_LIMIT_AUTH)
+async def reset_password_route(request: Request, payload: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
     await reset_password(db, payload.token, payload.new_password)
     return ResetPasswordResponse(success=True, message="Password reset successfully")
 
@@ -79,11 +86,8 @@ async def me(current_user: User = Depends(get_current_user)):
     return MeResponse(
         success=True,
         data=MeData(
-            id=user.id,
-            name=user.name,
-            email=user.email,
-            is_active=user.is_active,
-            is_verified=user.is_verified,
+            id=user.id, name=user.name, email=user.email,
+            is_active=user.is_active, is_verified=user.is_verified,
         ),
     )
 
@@ -100,11 +104,8 @@ async def update_me_route(
         success=True,
         message="Profile updated successfully",
         data=MeData(
-            id=user.id,
-            name=user.name,
-            email=user.email,
-            is_active=user.is_active,
-            is_verified=user.is_verified,
+            id=user.id, name=user.name, email=user.email,
+            is_active=user.is_active, is_verified=user.is_verified,
         ),
     )
 

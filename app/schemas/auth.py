@@ -20,8 +20,8 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr = Field(..., example="john@email.com")
-    password: str = Field(..., min_length=1, max_length=72, example="123456")
+    email: EmailStr = Field(..., example="root@gmail.com")
+    password: str = Field(..., min_length=1, max_length=72, example="root123456")
 
     @field_validator("password")
     @classmethod

@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     # Frontend
     FRONTEND_URL: str = "http://localhost:3000"
 
+    # Rate limiting
+    RATE_LIMIT_AUTH: str = "10/minute"      # login, register, forgot password
+    RATE_LIMIT_DEFAULT: str = "60/minute"  
+
 
     class Config:
         env_file = ".env"

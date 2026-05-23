@@ -1,26 +1,32 @@
 # 📁 app/main.py
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from sqlalchemy.exc import SQLAlchemyError
+from slowapi.errors import RateLimitExceeded
 from contextlib import asynccontextmanager
 from sqlalchemy import text
-import time
 
-from app.core.config import settings
-from app.core.database import engine
-from app.core.logger import logger
-from app.core.seeder import seed_roles_and_permissions
+from app.core import routes_cores, logger
 from app.db.session import AsyncSessionLocal
 
-# ── Import ALL models so Base knows about them before create_all ──────────────
+# ── Import ALL models ──────────────────────────────────────────────────────────
 from app.db.base import Base
 from app.db.models.user import User, Role, Permission, RefreshToken, PasswordResetToken  # noqa
 
 # ── Import all routers ─────────────────────────────────────────────────────────
 from app.routes import routes_controllers
 
+# ── Unpack core dependencies ───────────────────────────────────────────────────
+settings    = routes_cores["settings"]
+engine      = routes_cores["engine"]
+limiter     = routes_cores["limiter"]
+seed        = routes_cores["seed"]
+exc         = routes_cores["exception_handlers"]
 
-# ── Lifespan (startup / shutdown) ─────────────────────────────────────────────
+
+# ── Lifespan ───────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(f"🚀 Starting {settings.APP_NAME} v{settings.APP_VERSION}")
@@ -35,7 +41,7 @@ async def lifespan(app: FastAPI):
         logger.error(f"🗄️  Database    : ❌ FAILED — {e}")
         raise RuntimeError(f"Cannot connect to database: {e}")
 
-    # 2️⃣ Auto-create all tables
+    # 2️⃣ Auto-create tables
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
@@ -44,10 +50,10 @@ async def lifespan(app: FastAPI):
         logger.error(f"📋 Tables      : ❌ FAILED — {e}")
         raise RuntimeError(f"Cannot create tables: {e}")
 
-    # 3️⃣ Seed roles & permissions
+    # 3️⃣ Seed roles, permissions & super user
     try:
         async with AsyncSessionLocal() as session:
-            await seed_roles_and_permissions(session)
+            await seed(session)
     except Exception as e:
         logger.error(f"🌱 Seeder      : ❌ FAILED — {e}")
         raise RuntimeError(f"Seeder failed: {e}")
@@ -68,8 +74,16 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+# ── Rate limiter state ─────────────────────────────────────────────────────────
+app.state.limiter = limiter
 
-# ── CORS ───────────────────────────────────────────────────────────────────────
+# ── Exception handlers ─────────────────────────────────────────────────────────
+app.add_exception_handler(RequestValidationError, exc["validation"])
+app.add_exception_handler(SQLAlchemyError,        exc["sqlalchemy"])
+app.add_exception_handler(RateLimitExceeded,      exc["rate_limit"])
+app.add_exception_handler(Exception,              exc["global"])
+
+# ── Middlewares ────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -77,20 +91,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-# ── Request logging middleware ─────────────────────────────────────────────────
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    start = time.time()
-    response = await call_next(request)
-    duration = (time.time() - start) * 1000
-    logger.info(
-        f"{request.method} {request.url.path} "
-        f"| status={response.status_code} "
-        f"| {duration:.1f}ms"
-    )
-    return response
+app.add_middleware(routes_cores["middleware"])
 
 
 # ── Register all routers ───────────────────────────────────────────────────────
