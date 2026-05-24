@@ -1,29 +1,58 @@
 # 📁 app/main.py
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from slowapi.errors import RateLimitExceeded
 from contextlib import asynccontextmanager
 from sqlalchemy import text
+import traceback
+import asyncio
 
-from app.core import routes_cores, logger
+from app.core import (
+    settings, engine, logger, limiter,
+    seed_roles_and_permissions,
+    RequestMiddleware,
+    validation_exception_handler,
+    sqlalchemy_exception_handler,
+    rate_limit_exception_handler,
+    global_exception_handler,
+)
 from app.db.session import AsyncSessionLocal
 
 # ── Import ALL models ──────────────────────────────────────────────────────────
 from app.db.base import Base
 from app.db.models.user import User, Role, Permission, RefreshToken, PasswordResetToken  # noqa
+from app.db.models.product import Product, Category  # noqa
 
 # ── Import all routers ─────────────────────────────────────────────────────────
 from app.routes import routes_controllers
 
-# ── Unpack core dependencies ───────────────────────────────────────────────────
-settings    = routes_cores["settings"]
-engine      = routes_cores["engine"]
-limiter     = routes_cores["limiter"]
-seed        = routes_cores["seed"]
-exc         = routes_cores["exception_handlers"]
+
+# ── DB connection with retry ───────────────────────────────────────────────────
+async def connect_with_retry(retries: int = 5, delay: int = 5) -> None:
+    """Try to connect to DB, retry on failure."""
+    for attempt in range(1, retries + 1):
+        try:
+            async with AsyncSessionLocal() as session:
+                await session.execute(text("SELECT 1"))
+            logger.info("🗄️  Database    : ✅ connected")
+            return
+        except Exception as e:
+            logger.warning(
+                f"🗄️  Database    : ⚠️  attempt {attempt}/{retries} failed — {str(e) or type(e).__name__}"
+            )
+            if attempt < retries:
+                logger.info(f"   Retrying in {delay} seconds...")
+                await asyncio.sleep(delay)
+            else:
+                logger.error("🗄️  Database    : ❌ all retries exhausted")
+                logger.error(traceback.format_exc())
+                raise RuntimeError(
+                    f"Cannot connect to database after {retries} attempts. "
+                    f"Last error: {str(e) or type(e).__name__}"
+                )
 
 
 # ── Lifespan ───────────────────────────────────────────────────────────────────
@@ -32,14 +61,8 @@ async def lifespan(app: FastAPI):
     logger.info(f"🚀 Starting {settings.APP_NAME} v{settings.APP_VERSION}")
     logger.info(f"📦 Environment : {settings.ENVIRONMENT}")
 
-    # 1️⃣ Test DB connection
-    try:
-        async with AsyncSessionLocal() as session:
-            await session.execute(text("SELECT 1"))
-        logger.info("🗄️  Database    : ✅ connected")
-    except Exception as e:
-        logger.error(f"🗄️  Database    : ❌ FAILED — {e}")
-        raise RuntimeError(f"Cannot connect to database: {e}")
+    # 1️⃣ Connect to DB with retry
+    await connect_with_retry(retries=5, delay=5)
 
     # 2️⃣ Auto-create tables
     try:
@@ -47,16 +70,18 @@ async def lifespan(app: FastAPI):
             await conn.run_sync(Base.metadata.create_all)
         logger.info("📋 Tables      : ✅ ready")
     except Exception as e:
-        logger.error(f"📋 Tables      : ❌ FAILED — {e}")
-        raise RuntimeError(f"Cannot create tables: {e}")
+        logger.error(f"📋 Tables      : ❌ FAILED — {str(e)}")
+        logger.error(traceback.format_exc())
+        raise RuntimeError(f"Cannot create tables: {str(e)}")
 
     # 3️⃣ Seed roles, permissions & super user
     try:
         async with AsyncSessionLocal() as session:
-            await seed(session)
+            await seed_roles_and_permissions(session)
     except Exception as e:
-        logger.error(f"🌱 Seeder      : ❌ FAILED — {e}")
-        raise RuntimeError(f"Seeder failed: {e}")
+        logger.error(f"🌱 Seeder      : ❌ FAILED — {str(e)}")
+        logger.error(traceback.format_exc())
+        raise RuntimeError(f"Seeder failed: {str(e)}")
 
     yield
 
@@ -78,10 +103,10 @@ app = FastAPI(
 app.state.limiter = limiter
 
 # ── Exception handlers ─────────────────────────────────────────────────────────
-app.add_exception_handler(RequestValidationError, exc["validation"])
-app.add_exception_handler(SQLAlchemyError,        exc["sqlalchemy"])
-app.add_exception_handler(RateLimitExceeded,      exc["rate_limit"])
-app.add_exception_handler(Exception,              exc["global"])
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(SQLAlchemyError, sqlalchemy_exception_handler)
+app.add_exception_handler(RateLimitExceeded, rate_limit_exception_handler)
+app.add_exception_handler(Exception, global_exception_handler)
 
 # ── Middlewares ────────────────────────────────────────────────────────────────
 app.add_middleware(
@@ -91,7 +116,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(routes_cores["middleware"])
+app.add_middleware(RequestMiddleware)
 
 
 # ── Register all routers ───────────────────────────────────────────────────────
