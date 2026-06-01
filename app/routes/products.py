@@ -23,8 +23,13 @@ from app.utils.pagination import PaginationParams, PaginatedResponse
 router = APIRouter(prefix="/api/v1/products", tags=["Products"])
 
 
+# ── Helper: check if user is admin or above ────────────────────────────────────
+def _is_admin(user: User) -> bool:
+    return any(r.name in {"super_admin", "admin"} for r in user.roles)
+
+
 # ── Helper: build ProductData from ORM ────────────────────────────────────────
-def to_product_data(p) -> ProductData:
+def to_product_data(p, current_user: User) -> ProductData:
     return ProductData(
         id=p.id,
         no=p.no,
@@ -34,10 +39,13 @@ def to_product_data(p) -> ProductData:
         barcode=p.barcode,
         description=p.description,
         image_url=p.image_url,
-        price=p.price,
-        cost_price=p.cost_price,
+        price=float(p.price),
+        # ✅ Fix 2: hide cost_price from non-admin roles
+        cost_price=float(p.cost_price) if p.cost_price and _is_admin(current_user) else None,
         stock=p.stock,
         low_stock_threshold=p.low_stock_threshold,
+        # ✅ Fix 1: compute is_low_stock flag
+        is_low_stock=p.stock <= p.low_stock_threshold,
         status=p.status,
         category=CategoryItem(id=p.category.id, name=p.category.name) if p.category else None,
         created_at=p.created_at,
@@ -55,7 +63,7 @@ async def create(
     return ProductCreateResponse(
         success=True,
         message="Product created successfully",
-        data=to_product_data(product),
+        data=to_product_data(product, current_user),
     )
 
 
@@ -68,11 +76,11 @@ async def list_products(
     limit: int = Query(10, ge=1, le=100),
     search: str = Query(None, description="Search by name, sku, barcode, brand"),
     sort: str = Query("created_at_desc", description="name_asc | name_desc | price_asc | price_desc | stock_asc | stock_desc | created_at_asc | created_at_desc"),
-    category_id: Optional[UUID] = Query(None, description="Filter by category"),
+    category_id: Optional[UUID] = Query(None),
     status: Optional[str] = Query(None, description="active | inactive | out_of_stock"),
-    min_price: Optional[float] = Query(None, description="Min price"),
-    max_price: Optional[float] = Query(None, description="Max price"),
-    low_stock: Optional[bool] = Query(None, description="Show only low stock products"),
+    min_price: Optional[float] = Query(None),
+    max_price: Optional[float] = Query(None),
+    low_stock: Optional[bool] = Query(None, description="true = show only low stock products"),
 ):
     params = PaginationParams(page=page, limit=limit, search=search, sort=sort)
     products, meta = await get_products(
@@ -85,7 +93,7 @@ async def list_products(
     )
     return PaginatedResponse[ProductData](
         success=True,
-        data=[to_product_data(p) for p in products],
+        data=[to_product_data(p, current_user) for p in products],
         meta=meta,
     )
 
@@ -98,7 +106,10 @@ async def get_product(
     current_user: User = Depends(get_current_user),
 ):
     product = await get_product_by_id(db, str(product_id))
-    return ProductDetailResponse(success=True, data=to_product_data(product))
+    return ProductDetailResponse(
+        success=True,
+        data=to_product_data(product, current_user),
+    )
 
 
 # ── PUT /api/v1/products/{product_id} ─────────────────────────────────────────
@@ -113,7 +124,7 @@ async def update(
     return ProductUpdateResponse(
         success=True,
         message="Product updated successfully",
-        data=to_product_data(product),
+        data=to_product_data(product, current_user),
     )
 
 

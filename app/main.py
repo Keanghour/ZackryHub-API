@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.exceptions import RequestValidationError
+from fastapi.exceptions import RequestValidationError, HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 from slowapi.errors import RateLimitExceeded
 from contextlib import asynccontextmanager
@@ -11,6 +11,7 @@ import traceback
 import asyncio
 
 from app.core import (
+    http_exception_handler,
     settings, engine, logger, limiter,
     seed_roles_and_permissions,
     RequestMiddleware,
@@ -25,6 +26,8 @@ from app.db.session import AsyncSessionLocal
 from app.db.base import Base
 from app.db.models.user import User, Role, Permission, RefreshToken, PasswordResetToken  # noqa
 from app.db.models.product import Product, Category  # noqa
+from app.db.models.inventory import Warehouse, InventoryLog  # noqa
+from app.db.models.order import Order, OrderItem  # noqa
 
 # ── Import all routers ─────────────────────────────────────────────────────────
 from app.routes import routes_controllers
@@ -103,6 +106,7 @@ app = FastAPI(
 app.state.limiter = limiter
 
 # ── Exception handlers ─────────────────────────────────────────────────────────
+app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(SQLAlchemyError, sqlalchemy_exception_handler)
 app.add_exception_handler(RateLimitExceeded, rate_limit_exception_handler)
