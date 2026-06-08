@@ -94,14 +94,3 @@ class PasswordResetToken(Base):
     is_deleted = Column(Boolean, default=False, nullable=False)
 
     user = relationship("User", backref="password_reset_tokens")
-
-
-# ── Login Attempt Model ────────────────────────────────────────────────────────
-class LoginAttempt(Base):
-    __tablename__ = "login_attempts"
-
-    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    email       = Column(String(255), nullable=False, index=True)
-    ip_address  = Column(String(45), nullable=True)
-    success     = Column(Boolean, default=False, nullable=False)
-    attempted_at = Column(DateTime(timezone=True), server_default='now()', nullable=False)

@@ -1,5 +1,7 @@
 # 📁 app/core/seeder.py
 
+from logging import config
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, insert, delete
 from sqlalchemy.orm import selectinload
@@ -7,6 +9,8 @@ from sqlalchemy.orm import selectinload
 from app.db.models.user import Role, Permission, User, role_permissions, user_roles
 from app.core.logger import logger
 from app.core.security import hash_password
+
+from app.core.config import settings as config
 
 
 ROLES_PERMISSIONS = {
@@ -40,9 +44,13 @@ ROLES_PERMISSIONS = {
 }
 
 # ── Super user default credentials ────────────────────────────────────────────
-SUPER_USER_EMAIL    = "root@gmail.com"
-SUPER_USER_PASSWORD = "root123456"
-SUPER_USER_NAME     = "Super Admin"
+# SUPER_USER_EMAIL    = "root@gmail.com"
+# SUPER_USER_PASSWORD = "root123456"
+# SUPER_USER_NAME     = "Super Admin"
+
+SUPER_USER_EMAIL    = config.SUPER_USER_EMAIL
+SUPER_USER_PASSWORD = config.SUPER_USER_PASSWORD
+SUPER_USER_NAME     = config.SUPER_USER_NAME
 
 
 async def seed_roles_and_permissions(db: AsyncSession) -> None:

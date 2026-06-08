@@ -32,13 +32,23 @@ class Settings(BaseSettings):
     MAIL_SERVER: str = "smtp.gmail.com"
     MAIL_STARTTLS: bool = True
     MAIL_SSL_TLS: bool = False
+
+    SUPER_USER_EMAIL: str 
+    SUPER_USER_PASSWORD: str 
+    SUPER_USER_NAME: str
     
     # Frontend
     FRONTEND_URL: str = "http://localhost:3000"
 
     # Rate limiting
-    RATE_LIMIT_AUTH: str = "10/minute"      # login, register, forgot password
+    RATE_LIMIT_AUTH: str = "10/minute"     
     RATE_LIMIT_DEFAULT: str = "60/minute"  
+
+    # Security
+    MAX_REQUEST_BODY_SIZE: int = 10 * 1024 * 1024  # 10MB default
+    SECRET_KEY_MIN_LENGTH: int = 32
+    MAX_LOGIN_ATTEMPTS: int = 5
+    LOCKOUT_DURATION_MINUTES: int = 15
 
 
     class Config:
