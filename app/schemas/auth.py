@@ -2,14 +2,14 @@
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from uuid import UUID
+from app.schemas.base import BaseResponse
 
 
 # ── Request Schemas ────────────────────────────────────────────────────────────
-
 class RegisterRequest(BaseModel):
-    name: str = Field(..., min_length=2, max_length=100, example="John Doe")
-    email: EmailStr = Field(..., example="john@email.com")
-    password: str = Field(..., min_length=6, max_length=72, example="123456")
+    name:     str      = Field(..., min_length=2, max_length=100, example="John Doe")
+    email:    EmailStr = Field(..., example="john@email.com")
+    password: str      = Field(..., min_length=6, max_length=72, example="123456")
 
     @field_validator("password")
     @classmethod
@@ -20,8 +20,8 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr = Field(..., example="root@gmail.com")
-    password: str = Field(..., min_length=1, max_length=72, example="root123456")
+    email:    EmailStr = Field(..., example="root@gmail.com")
+    password: str      = Field(..., min_length=1, max_length=72, example="root123456")
 
     @field_validator("password")
     @classmethod
@@ -31,43 +31,32 @@ class LoginRequest(BaseModel):
         return v
 
 
-# ── Response Schemas ───────────────────────────────────────────────────────────
-
+# ── Response Data ──────────────────────────────────────────────────────────────
 class RegisterData(BaseModel):
-    id: UUID
-    name: str
+    id:    UUID
+    name:  str
     email: str
-
     class Config:
         from_attributes = True
 
 
-class RegisterResponse(BaseModel):
-    success: bool = True
-    message: str = "User registered successfully"
+class RegisterResponse(BaseResponse):
+    code:    int  = 201
+    message: str  = "User registered successfully"
     data: RegisterData
 
 
 class LoginData(BaseModel):
-    access_token: str
+    access_token:  str
     refresh_token: str
-    token_type: str = "bearer"
+    token_type:    str = "bearer"
 
 
-class LoginResponse(BaseModel):
-    success: bool = True
-    message: str = "Login successful"
+class LoginResponse(BaseResponse):
+    code:    int  = 200
+    message: str  = "Login successful"
     data: LoginData
 
-
-# ── Error Response ─────────────────────────────────────────────────────────────
-
-class ErrorResponse(BaseModel):
-    success: bool = False
-    message: str
-
-
-# ── Refresh Token ──────────────────────────────────────────────────────────────
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str = Field(..., example="token_here")
@@ -77,26 +66,23 @@ class RefreshTokenData(BaseModel):
     access_token: str
 
 
-class RefreshTokenResponse(BaseModel):
-    success: bool = True
+class RefreshTokenResponse(BaseResponse):
+    code:    int  = 200
+    message: str  = "Token refreshed successfully"
     data: RefreshTokenData
 
-
-# ── Forgot Password ────────────────────────────────────────────────────────────
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr = Field(..., example="john@email.com")
 
 
-class ForgotPasswordResponse(BaseModel):
-    success: bool = True
-    message: str = "Reset link sent to email"
+class ForgotPasswordResponse(BaseResponse):
+    code:    int  = 200
+    message: str  = "Reset link sent to email"
 
-
-# ── Reset Password ─────────────────────────────────────────────────────────────
 
 class ResetPasswordRequest(BaseModel):
-    token: str = Field(..., example="reset_token")
+    token:        str = Field(..., example="reset_token")
     new_password: str = Field(..., min_length=6, max_length=72, example="newpass123")
 
     @field_validator("new_password")
@@ -107,47 +93,41 @@ class ResetPasswordRequest(BaseModel):
         return v
 
 
-class ResetPasswordResponse(BaseModel):
-    success: bool = True
-    message: str = "Password reset successfully"
+class ResetPasswordResponse(BaseResponse):
+    code:    int  = 200
+    message: str  = "Password reset successfully"
 
-
-# ── Get Me ─────────────────────────────────────────────────────────────────────
 
 class MeData(BaseModel):
-    id: UUID
-    name: str
-    email: str
-    is_active: bool
+    id:          UUID
+    name:        str
+    email:       str
+    is_active:   bool
     is_verified: bool
-
     class Config:
         from_attributes = True
 
 
-class MeResponse(BaseModel):
-    success: bool = True
+class MeResponse(BaseResponse):
+    code:    int  = 200
+    message: str  = "Success"
     data: MeData
 
-
-# ── Update Me ──────────────────────────────────────────────────────────────────
 
 class UpdateMeRequest(BaseModel):
-    name: str = Field(None, min_length=2, max_length=100, example="John Updated")
-    email: EmailStr = Field(None, example="john_new@email.com")
+    name:  str       = Field(None, min_length=2, max_length=100)
+    email: EmailStr  = Field(None)
 
 
-class UpdateMeResponse(BaseModel):
-    success: bool = True
-    message: str = "Profile updated successfully"
+class UpdateMeResponse(BaseResponse):
+    code:    int  = 200
+    message: str  = "Profile updated successfully"
     data: MeData
 
-
-# ── Change Password ────────────────────────────────────────────────────────────
 
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(..., min_length=1, max_length=72, example="oldpass123")
-    new_password: str = Field(..., min_length=6, max_length=72, example="newpass123")
+    new_password:     str = Field(..., min_length=6, max_length=72, example="newpass123")
 
     @field_validator("new_password")
     @classmethod
@@ -157,17 +137,15 @@ class ChangePasswordRequest(BaseModel):
         return v
 
 
-class ChangePasswordResponse(BaseModel):
-    success: bool = True
-    message: str = "Password changed successfully"
+class ChangePasswordResponse(BaseResponse):
+    code:    int  = 200
+    message: str  = "Password changed successfully"
 
-
-# ── Logout ─────────────────────────────────────────────────────────────────────
 
 class LogoutRequest(BaseModel):
     refresh_token: str = Field(..., example="token_here")
 
 
-class LogoutResponse(BaseModel):
-    success: bool = True
-    message: str = "Logged out successfully"
+class LogoutResponse(BaseResponse):
+    code:    int  = 200
+    message: str  = "Logged out successfully"

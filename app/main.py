@@ -13,14 +13,14 @@ import asyncio
 from app.core import (
     settings, engine, logger, limiter,
     seed_roles_and_permissions,
-    RequestMiddleware,
+    LoggingMiddleware,
+    SecurityMiddleware,
     http_exception_handler,
     validation_exception_handler,
     sqlalchemy_exception_handler,
     rate_limit_exception_handler,
     global_exception_handler,
 )
-from app.core.security_middleware import SecurityMiddleware
 from app.core.startup_checks import run_startup_checks
 from app.db.session import AsyncSessionLocal
 
@@ -44,7 +44,10 @@ async def connect_with_retry(retries: int = 5, delay: int = 5) -> None:
             logger.info("🗄️  Database    : ✅ connected")
             return
         except Exception as e:
-            logger.warning(f"🗄️  Database    : ⚠️  attempt {attempt}/{retries} failed — {str(e) or type(e).__name__}")
+            logger.warning(
+                f"🗄️  Database    : ⚠️  attempt {attempt}/{retries} failed — "
+                f"{str(e) or type(e).__name__}"
+            )
             if attempt < retries:
                 logger.info(f"   Retrying in {delay} seconds...")
                 await asyncio.sleep(delay)
@@ -95,30 +98,30 @@ app = FastAPI(
     version=settings.APP_VERSION,
     debug=settings.DEBUG,
     lifespan=lifespan,
-    docs_url="/docs" if settings.DEBUG else None,      # hide docs in production
+    docs_url="/docs"  if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,
 )
 
-# ── Rate limiter state ─────────────────────────────────────────────────────────
+# ── Rate limiter ───────────────────────────────────────────────────────────────
 app.state.limiter = limiter
 
 # ── Exception handlers ─────────────────────────────────────────────────────────
-app.add_exception_handler(HTTPException, http_exception_handler)
-app.add_exception_handler(RequestValidationError, validation_exception_handler)
-app.add_exception_handler(SQLAlchemyError, sqlalchemy_exception_handler)
-app.add_exception_handler(RateLimitExceeded, rate_limit_exception_handler)
-app.add_exception_handler(Exception, global_exception_handler)
+app.add_exception_handler(HTTPException,           http_exception_handler)
+app.add_exception_handler(RequestValidationError,  validation_exception_handler)
+app.add_exception_handler(SQLAlchemyError,         sqlalchemy_exception_handler)
+app.add_exception_handler(RateLimitExceeded,       rate_limit_exception_handler)
+app.add_exception_handler(Exception,               global_exception_handler)
 
-# ── Middlewares (order matters — last added = first executed) ──────────────────
+# ── Middlewares (last added = first executed) ──────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],        # 🔒 change to your domain in prod
+    allow_origins=["*"],       # 🔒 lock to your domain in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 app.add_middleware(SecurityMiddleware)   # security headers + body size limit
-app.add_middleware(RequestMiddleware)   # request ID + logging
+app.add_middleware(LoggingMiddleware)    # ✅ enterprise structured logging
 
 
 # ── Register all routers ───────────────────────────────────────────────────────
@@ -138,6 +141,8 @@ async def health_check():
         db_status = f"error: {str(e)}"
 
     return {
+        "success":     True,
+        "code":        200,
         "status":      "ok" if db_status == "connected" else "degraded",
         "app":         settings.APP_NAME,
         "version":     settings.APP_VERSION,
@@ -150,6 +155,8 @@ async def health_check():
 @app.get("/", tags=["Root"])
 async def root():
     return {
+        "success": True,
+        "code":    200,
         "message": f"Welcome to {settings.APP_NAME}",
         "version": settings.APP_VERSION,
         "docs":    "/docs" if settings.DEBUG else "disabled in production",

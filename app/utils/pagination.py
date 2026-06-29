@@ -26,13 +26,14 @@ class PaginationParams:
 
 
 class PaginationMeta(BaseModel):
-    total: int
-    page: int
-    limit: int
+    total:       int
+    page:        int
+    limit:       int
     total_pages: int
 
 
 class PaginatedResponse(BaseModel, Generic[T]):
     success: bool = True
-    data: List[T]
-    meta: PaginationMeta
+    code:    int  = 200                
+    data:    List[T]
+    meta:    PaginationMeta

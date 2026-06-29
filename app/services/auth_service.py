@@ -85,7 +85,7 @@ async def login_user(
     payload: LoginRequest,
     ip_address: str = None,
 ) -> dict:
-    auth_logger.info(f"Login attempt | email={payload.email} | ip={ip_address}")
+    # auth_logger.info(f"Login attempt | email={payload.email} | ip={ip_address}")
 
     # ✅ Fix 1: Check account lockout BEFORE hitting the DB for user
     await _check_lockout(db, payload.email)

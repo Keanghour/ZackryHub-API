@@ -20,17 +20,19 @@ from .middleware import (
     rate_limit_exception_handler,
     global_exception_handler,
 )
+from .logging_middleware import LoggingMiddleware
+from .security_middleware import SecurityMiddleware
 from .dependencies import get_current_user, require_roles
 from .seeder import seed_roles_and_permissions
-from .exceptions import InsufficientStockException
+from .exceptions import InsufficientStockException, AppException
 
 
 routes_cores = {
-    "settings":  settings,
-    "engine":    engine,
-    "limiter":   limiter,
-    "seed":      seed_roles_and_permissions,
-    "middleware": RequestMiddleware,
+    "settings":   settings,
+    "engine":     engine,
+    "limiter":    limiter,
+    "seed":       seed_roles_and_permissions,
+    "middleware":  RequestMiddleware,
     "exception_handlers": {
         "validation": validation_exception_handler,
         "sqlalchemy": sqlalchemy_exception_handler,
